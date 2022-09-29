@@ -10,6 +10,6 @@ output "cluster_platform_version" {
   value = module.eks.cluster_platform_version
 }
 
-output "eks_cluster_autoscaler_arn" {
-  value = aws_iam_role.eks_cluster_autoscaler.arn
-}
+# output "eks_cluster_autoscaler_arn" {
+#   value = aws_iam_role.eks_cluster_autoscaler.arn
+# }
