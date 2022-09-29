@@ -3,13 +3,10 @@ output "oidc_provider_arn" {
 }
 
 output "cluster_name" {
-  value = var.cluster_name
+  value = local.name
 }
 
-output "cluster_platform_version" {
-  value = module.eks.cluster_platform_version
+output "configure_kubectl" {
+  description = "Configure kubectl: make sure you're logged in with the correct AWS profile and run the following command to update your kubeconfig"
+  value       = module.eks_blueprints.configure_kubectl
 }
-
-# output "eks_cluster_autoscaler_arn" {
-#   value = aws_iam_role.eks_cluster_autoscaler.arn
-# }

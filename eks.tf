@@ -1,69 +1,79 @@
-module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "18.29.0"
+module "eks_blueprints" {
+  source = "github.com/aws-ia/terraform-aws-eks-blueprints"
 
+  cluster_name    = local.name
   cluster_version = var.kubernetes_version
 
-  cluster_endpoint_private_access = true
-  cluster_endpoint_public_access  = true
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnets
 
-  cluster_name  = var.cluster_name  
-  vpc_id        = module.vpc.vpc_id
-  subnet_ids    = module.vpc.private_subnets
+  #----------------------------------------------------------------------------------------------------------#
+  # Security groups used in this module created by the upstream modules terraform-aws-eks (https://github.com/terraform-aws-modules/terraform-aws-eks).
+  #   Upstream module implemented Security groups based on the best practices doc https://docs.aws.amazon.com/eks/latest/userguide/sec-group-reqs.html.
+  #   So, by default the security groups are restrictive. Users needs to enable rules for specific ports required for App requirement or Add-ons
+  #   See the notes below for each rule used in these examples
+  #----------------------------------------------------------------------------------------------------------#
+  node_security_group_additional_rules = {
+    # Extend node-to-node security group rules. Recommended and required for the Add-ons
+    ingress_self_all = {
+      description = "Node to node all ports/protocols"
+      protocol    = "-1"
+      from_port   = 0
+      to_port     = 0
+      type        = "ingress"
+      self        = true
+    }
+    # Recommended outbound traffic for Node groups
+    egress_all = {
+      description      = "Node all egress"
+      protocol         = "-1"
+      from_port        = 0
+      to_port          = 0
+      type             = "egress"
+      cidr_blocks      = ["0.0.0.0/0"]
+      ipv6_cidr_blocks = ["::/0"]
+    }
 
-  cluster_enabled_log_types = var.cluster_enabled_log_types
-
-  #The enable_irsa flag will lead to the OIDC (OpenID Connect) provider being created.
-  enable_irsa = true
-
-
-  # additional requirments
-  workers_role_name         = "iam-eks-workers-role"
-  create_eks                = true
-  manage_aws_auth           = true
-  write_kubeconfig          = true
-  kubeconfig_output_path    = "/root/.kube/config" # touch /root/.kube/config   # for terraform HELM provider, we neeed this + #  Error: configmaps "aws-auth" already exists 
-  kubeconfig_name           = "config"                                                                                         #  Solution: kubectl delete configmap aws-auth -n kube-system
-
-  # Node groups
-  node_groups = {
-    eks-workers = {
-      create_launch_template = true
-      name                   = "worker"  # Eks Workers Node Groups Name
-      instance_types         = ["t3a.medium"]
-      capacity_type          = "ON_DEMAND"
-      desired_capacity       = 1
-      max_capacity           = 2
-      min_capacity           = 1
-      disk_type              = "gp3"
-      disk_size              = 30
-      ebs_optimized          = true
-      disk_encrypted         = true
-      key_name               = "terraform-worker-node"
-      enable_monitoring      = true
-
-      additional_tags = {
-        "Name"                     = "eks-worker"                            # Tags for Cluster Worker Nodes
-        "karpenter.sh/discovery"   = var.cluster_name
-      }
-
+    # Allows Control Plane Nodes to talk to Worker nodes on Karpenter ports.
+    # This can be extended further to specific port based on the requirement for others Add-on e.g., metrics-server 4443, spark-operator 8080, etc.
+    # Change this according to your security requirements if needed
+    ingress_nodes_karpenter_port = {
+      description                   = "Cluster API to Nodegroup for Karpenter"
+      protocol                      = "tcp"
+      from_port                     = 8443
+      to_port                       = 8443
+      type                          = "ingress"
+      source_cluster_security_group = true
     }
   }
 
-  tags = {
-    environment = var.environment
-    name = "${local.prefix}-node-group"
-    "karpenter.sh/discovery" = var.cluster_name
+  # Add karpenter.sh/discovery tag so that we can use this as securityGroupSelector in karpenter provisioner
+  node_security_group_tags = {
+    "karpenter.sh/discovery/${local.name}" = local.name
   }
-}
 
+  # EKS MANAGED NODE GROUPS
+  # We recommend to have a MNG to place your critical workloads and add-ons
+  # Then rely on Karpenter to scale your workloads
+  # You can also make uses on nodeSelector and Taints/tolerations to spread workloads on MNG or Karpenter provisioners
+  managed_node_groups = {
+    mg_5 = {
+      node_group_name = "managed-ondemand"
+      instance_types  = ["t3.xlarge"]
 
-data "aws_eks_cluster_auth" "eks" {
-  name = module.eks.cluster_id
-}
+      subnet_ids   = module.vpc.private_subnets
+      max_size     = var.max_size
+      desired_size = var.desired_size
+      min_size     = var.min_size
+      update_config = [{
+        max_unavailable_percentage = 30
+      }]
 
-provider "kubernetes" {
-  host                   = module.eks.cluster_endpoint
-  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-  token                  = data.aws_eks_cluster_auth.eks.token
+      # Launch template configuration
+      create_launch_template = true              # false will use the default launch template
+      launch_template_os     = "amazonlinux2eks" # amazonlinux2eks or bottlerocket
+    }
+  }
+
+  tags = local.tags
 }
