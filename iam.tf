@@ -1,68 +1,25 @@
-resource "aws_iam_role" "cluster" {
-  name = "${var.cluster_name}-eks-cluster-role"
+resource "aws_iam_instance_profile" "karpenter" {
+  name = "KarpenterNodeInstanceProfile-${local.cluster_name}"
+  role = module.eks.eks_managed_node_groups["initial"].iam_role_name
+}
 
-  assume_role_policy = <<POLICY
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "eks.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole"
-    }
+
+module "karpenter_irsa" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version = "4.17.1"
+
+  role_name                          = "karpenter-controller-${local.cluster_name}"
+  attach_karpenter_controller_policy = true
+
+  karpenter_controller_cluster_id = module.eks.cluster_id
+  karpenter_controller_node_iam_role_arns = [
+    module.eks.eks_managed_node_groups["initial"].iam_role_arn
   ]
-}
-POLICY
-}
 
-resource "aws_iam_role_policy_attachment" "cluster-AmazonEKSClusterPolicy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
-  role       = aws_iam_role.cluster.name
-}
-
-resource "aws_iam_role_policy_attachment" "cluster-AmazonEKSServicePolicy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSServicePolicy"
-  role       = aws_iam_role.cluster.name
-}
-
-# NODES
-resource "aws_iam_role" "node" {
-  name = "${var.cluster_name}-eks-node-role"
-
-  assume_role_policy = <<POLICY
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "ec2.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole"
+  oidc_providers = {
+    ex = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["karpenter:karpenter"]
     }
-  ]
-}
-POLICY
-}
-
-resource "aws_iam_role_policy_attachment" "node-AmazonEKSWorkerNodePolicy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
-  role       = aws_iam_role.node.name
-}
-
-resource "aws_iam_role_policy_attachment" "node-AmazonEKS_CNI_Policy" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
-  role       = aws_iam_role.node.name
-}
-
-resource "aws_iam_role_policy_attachment" "node-AmazonEC2ContainerRegistryReadOnly" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-  role       = aws_iam_role.node.name
-}
-
-resource "aws_iam_instance_profile" "node" {
-  name = "${var.cluster_name}-eks-node-instance-profile"
-  role = aws_iam_role.node.name
+  }
 }
