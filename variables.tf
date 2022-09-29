@@ -18,7 +18,7 @@ variable "cluster_name" {
 
 variable "cluster_enabled_log_types" {
   type    = list(string)
-  default = ["audit", "api", "authenticator"]
+  default = ["audit", "api", "authenticator", "controllerManager", "scheduler"]
 }
 
 variable "cluster_endpoint_private_access_cidrs" {
