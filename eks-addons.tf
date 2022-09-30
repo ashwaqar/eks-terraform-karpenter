@@ -5,8 +5,10 @@ module "eks_blueprints_kubernetes_addons" {
   eks_cluster_endpoint = module.eks_blueprints.eks_cluster_endpoint
   eks_oidc_provider    = module.eks_blueprints.oidc_provider
   eks_cluster_version  = module.eks_blueprints.eks_cluster_version
+  
 
   enable_amazon_eks_aws_ebs_csi_driver = true
+  enable_aws_load_balancer_controller = true
 
   enable_karpenter                    = true
   enable_aws_node_termination_handler = true
@@ -74,3 +76,5 @@ resource "kubectl_manifest" "karpenter_provisioner" {
 
   depends_on = [module.eks_blueprints_kubernetes_addons]
 }
+
+
