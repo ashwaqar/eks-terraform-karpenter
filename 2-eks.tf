@@ -69,7 +69,7 @@ module "eks" {
         role = "general"
       }
 
-      instance_types = ["t3.xlarge"]
+      instance_types = ["t3.medium"]
       capacity_type  = "ON_DEMAND"
     }
 
@@ -91,10 +91,10 @@ module "eks" {
       instance_types = ["t3.micro"]
       capacity_type  = "SPOT"
 
-      additional_tags = {
-        "Name"                     = "eks-worker"                            # Tags for Cluster Worker Nodes
-        "karpenter.sh/discovery"   = local.name
-      }
+      # additional_tags = {
+      #   "Name"                     = "eks-worker"                            # Tags for Cluster Worker Nodes
+      #   "karpenter.sh/discovery"   = local.name
+      # }
     }
   }
 
@@ -119,15 +119,18 @@ module "eks" {
   # }
 
   tags = local.tags
+
 }
 
 # https://github.com/terraform-aws-modules/terraform-aws-eks/issues/2009
 
 data "aws_eks_cluster" "default" {
   name = module.eks.cluster_name
+
 }
 data "aws_eks_cluster_auth" "default" {
   name = module.eks.cluster_name
+
 }
 
 provider "kubernetes" {
